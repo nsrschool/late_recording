@@ -64,9 +64,14 @@
         <div id="edit-modal-content" class="bg-white rounded-lg shadow-xl w-full max-w-lg m-4 transform transition-all opacity-0 -translate-y-10 flex flex-col">
             <div class="p-6 border-b"><h3 id="edit-modal-title" class="text-xl font-bold">แก้ไขข้อมูล</h3></div>
             <div id="edit-modal-body" class="p-6 space-y-4 overflow-y-auto"></div>
-            <div class="p-4 bg-gray-50 flex justify-end space-x-3 rounded-b-lg">
-                <button id="edit-modal-cancel" class="px-5 py-2 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300">ยกเลิก</button>
-                <button id="edit-modal-save" class="px-5 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700">บันทึก</button>
+            <div class="p-4 bg-gray-50 flex justify-between items-center rounded-b-lg">
+                <button id="edit-modal-delete" class="hidden px-5 py-2 bg-red-100 text-red-700 rounded-lg hover:bg-red-200 font-semibold">
+                    <i class="fas fa-trash-alt mr-2"></i>ลบบันทึก
+                </button>
+                <div class="space-x-3">
+                    <button id="edit-modal-cancel" class="px-5 py-2 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300">ยกเลิก</button>
+                    <button id="edit-modal-save" class="px-5 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700">บันทึก</button>
+                </div>
             </div>
         </div>
     </div>
@@ -444,6 +449,7 @@
                 <div><label for="edit-student-points" class="block text-sm font-medium text-gray-700">คะแนน</label><input type="number" id="edit-student-points" value="${student.points}" class="mt-1 block w-full p-2 border border-gray-300 rounded-md"></div>
             </div>`;
         
+        getEl('edit-modal-delete').classList.add('hidden');
         const saveButton = getEl('edit-modal-save');
         const newSaveButton = saveButton.cloneNode(true);
         saveButton.parentNode.replaceChild(newSaveButton, saveButton);
@@ -509,6 +515,7 @@
         bodyHtml += `</div>`;
 
         getEl('edit-modal-body').innerHTML = bodyHtml;
+        getEl('edit-modal-delete').classList.add('hidden');
         
         const saveButton = getEl('edit-modal-save');
         const newSaveButton = saveButton.cloneNode(true);
@@ -574,6 +581,12 @@
                 totalPointsEl.className = `font-bold ${total < 0 ? 'text-red-500' : 'text-green-500'}`;
             });
         });
+        
+        const deleteButton = getEl('edit-modal-delete');
+        deleteButton.classList.remove('hidden');
+        const newDeleteButton = deleteButton.cloneNode(true);
+        deleteButton.parentNode.replaceChild(newDeleteButton, deleteButton);
+        newDeleteButton.addEventListener('click', () => handleDeleteTardyRecord(recordId));
 
         const saveButton = getEl('edit-modal-save');
         const newSaveButton = saveButton.cloneNode(true);
@@ -602,6 +615,32 @@
             updateDashboard();
         }
     }
+
+    function handleDeleteTardyRecord(recordId) {
+        hideEditModal();
+        setTimeout(() => { // Timeout allows the first modal to finish its closing animation
+            showConfirm({
+                title: 'ยืนยันการลบ',
+                body: 'คุณต้องการลบบันทึกการมาสายนี้อย่างถาวรใช่หรือไม่?<br><strong class="text-red-600">หากบันทึกนี้เคยอนุมัติแล้ว คะแนนจะถูกคืนให้นักเรียน</strong>',
+                confirmText: 'ลบ',
+                onConfirm: async () => {
+                    const result = await apiCall('deleteTardyRecord', { recordId });
+                    if (result && result.success) {
+                        showToast('ลบบันทึกเรียบร้อยแล้ว', 'info');
+                        await fetchInitialData(); // Full data refresh is safest
+                        if(state.currentUser.role === 'admin') {
+                            updateDashboard();
+                            renderAllRecordsList();
+                        }
+                        if(state.currentUser.role === 'approver') {
+                            renderPendingList();
+                        }
+                    }
+                }
+            });
+        }, 300);
+    }
+
 
     function showEditModal() {
         const modalContainer = getEl('edit-modal-container'), modalContent = getEl('edit-modal-content');
