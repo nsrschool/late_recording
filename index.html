@@ -1,0 +1,867 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ระบบบันทึกการมาสาย - รร.หนองสำโรงวิทยา</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <!-- Library for Excel file processing -->
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <style>
+        body {
+            font-family: 'Sarabun', sans-serif;
+            background-color: #f8fafc; /* slate-50 */
+        }
+        .view { display: none; }
+        .view.active { display: block; }
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: #f1f1f1; }
+        ::-webkit-scrollbar-thumb { background: #a5b4fc; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #818cf8; }
+        .form-option input:checked + div {
+            border-color: #4f46e5; background-color: #eef2ff;
+            color: #312e81; font-weight: 600;
+        }
+        .file-input-label {
+            cursor: pointer; border: 2px dashed #cbd5e1;
+            padding: 2rem; text-align: center; border-radius: 0.5rem; transition: all 0.2s;
+        }
+        .file-input-label:hover { border-color: #4f46e5; background-color: #eef2ff; }
+        #edit-modal-content { max-height: 90vh; }
+    </style>
+</head>
+<body class="text-gray-800">
+
+    <!-- Toast Notification Container -->
+    <div id="toast-container" class="fixed top-5 right-5 z-[100] space-y-3 w-80"></div>
+    
+    <!-- Loading Overlay -->
+    <div id="loading-overlay" class="fixed inset-0 bg-white bg-opacity-75 z-[99] items-center justify-center hidden">
+        <div class="flex flex-col items-center">
+            <i class="fas fa-spinner fa-spin text-5xl text-indigo-600"></i>
+            <p class="mt-4 text-lg font-semibold text-gray-700">กำลังประมวลผล...</p>
+        </div>
+    </div>
+
+    <!-- Confirmation Modal -->
+    <div id="modal-container" class="fixed inset-0 bg-black bg-opacity-60 z-50 items-center justify-center hidden">
+        <div id="modal-content" class="bg-white rounded-lg shadow-xl p-6 w-full max-w-sm m-4 transform transition-all opacity-0 -translate-y-10">
+            <h3 id="modal-title" class="text-lg font-bold mb-2"></h3>
+            <p id="modal-body" class="text-gray-600 mb-6"></p>
+            <div class="flex justify-end space-x-3">
+                <button id="modal-cancel" class="px-4 py-2 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300 transition-colors">ยกเลิก</button>
+                <button id="modal-confirm" class="px-4 py-2 text-white rounded-lg transition-colors"></button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Generic Edit Modal -->
+    <div id="edit-modal-container" class="fixed inset-0 bg-black bg-opacity-60 z-50 items-center justify-center hidden">
+        <div id="edit-modal-content" class="bg-white rounded-lg shadow-xl w-full max-w-lg m-4 transform transition-all opacity-0 -translate-y-10 flex flex-col">
+            <div class="p-6 border-b"><h3 id="edit-modal-title" class="text-xl font-bold">แก้ไขข้อมูล</h3></div>
+            <div id="edit-modal-body" class="p-6 space-y-4 overflow-y-auto"></div>
+            <div class="p-4 bg-gray-50 flex justify-end space-x-3 rounded-b-lg">
+                <button id="edit-modal-cancel" class="px-5 py-2 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300">ยกเลิก</button>
+                <button id="edit-modal-save" class="px-5 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700">บันทึก</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="app" class="max-w-7xl mx-auto p-4 md:p-6">
+        <header class="bg-white rounded-xl shadow-sm p-4 mb-6">
+            <div class="flex justify-between items-center">
+                <div class="flex items-center space-x-4">
+                    <div class="bg-indigo-600 p-3 rounded-full text-white shadow-lg"><i class="fas fa-school text-2xl"></i></div>
+                    <div>
+                        <h1 class="text-xl font-bold text-gray-800">โรงเรียนหนองสำโรงวิทยา</h1>
+                        <p class="text-sm text-gray-500">ระบบบันทึกข้อมูลการมาสาย</p>
+                    </div>
+                </div>
+                <div class="flex items-center space-x-4">
+                    <p id="current-role-display" class="hidden md:block text-sm text-gray-500 text-right"></p>
+                    <div id="nav-buttons" class="hidden md:flex items-center space-x-2"></div>
+                    <button id="mobile-menu-button" class="md:hidden p-2 rounded-md hover:bg-gray-100"><i class="fas fa-bars text-xl"></i></button>
+                </div>
+            </div>
+            <div id="mobile-menu" class="hidden md:hidden mt-4 flex flex-col space-y-2"></div>
+        </header>
+
+        <main>
+            <div id="login-view" class="view active bg-white p-8 rounded-xl shadow-sm text-center"></div>
+            <div id="recorder-view" class="view"></div>
+            <div id="approver-view" class="view bg-white p-6 rounded-xl shadow-sm"></div>
+            <div id="admin-view" class="view"></div>
+            <div id="admin-students-view" class="view"></div>
+            <div id="admin-rules-view" class="view"></div>
+        </main>
+    </div>
+
+<script>
+    // --- 1. CONFIGURATION ---
+    const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbz4_PTNoD-rGv59D9ukMzZryhjBCB04VEsik3E_IU4g2OzeRDS4LAESHjwO3MTNcwk7/exec';
+
+    // --- 2. APPLICATION STATE ---
+    let appData = {
+        students: [], tardyRecords: [], rules: { reasons: [], sanctions: [] },
+        users: {
+            recorder: { id: 'U01', name: 'สภานักเรียน', role: 'recorder' },
+            approver: { id: 'U02', name: 'ครูเวร', role: 'teacher' },
+            admin: { id: 'U03', name: 'ผู้บริหาร', role: 'admin' },
+        }
+    };
+    let state = { currentUser: null, currentView: 'login', selectedStudent: null, selectedReason: null, selectedSanctions: [], totalPointsDelta: 0, editingItemId: null };
+
+    const getEl = (id) => document.getElementById(id);
+    const views = document.querySelectorAll('.view');
+    const loadingOverlay = getEl('loading-overlay');
+
+    // --- 3. GOOGLE APPS SCRIPT COMMUNICATION ---
+    async function apiCall(action, payload = {}) {
+        if (!SCRIPT_URL.startsWith('https')) {
+            showToast('กรุณาตั้งค่า URL ของ Google Apps Script ก่อน', 'error');
+            return null;
+        }
+        loadingOverlay.style.display = 'flex';
+        try {
+            const response = await fetch(SCRIPT_URL, {
+                method: 'POST', mode: 'cors', credentials: 'omit', redirect: 'follow',
+                headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                body: JSON.stringify({ action, payload })
+            });
+            const result = await response.json();
+            if (result.status === 'error') throw new Error(result.message);
+            return result.data;
+        } catch (error) {
+            console.error('API Call Error:', { action, error });
+            showToast(`เกิดข้อผิดพลาด: ${error.message}`, 'error');
+            return null;
+        } finally {
+            loadingOverlay.style.display = 'none';
+        }
+    }
+
+    async function fetchInitialData() {
+        if (!SCRIPT_URL.startsWith('https'
+)) return;
+        loadingOverlay.style.display = 'flex';
+        try {
+            const response = await fetch(SCRIPT_URL);
+            const data = await response.json();
+            if (data.error) throw new Error(data.error);
+            if (data.tardyRecords) {
+                data.tardyRecords.forEach(r => { if (r.recordedAt) r.recordedAt = new Date(r.recordedAt); });
+            }
+            appData = { ...appData, ...data };
+        } catch (error) {
+            console.error('Initial Data Fetch Error:', error);
+            showToast('ไม่สามารถโหลดข้อมูลเริ่มต้นได้ โปรดตรวจสอบการตั้งค่า', 'error');
+        } finally {
+            loadingOverlay.style.display = 'none';
+        }
+    }
+
+    // --- 4. UTILITY FUNCTIONS (UI, Modals, Navigation) ---
+    const formatTime = (date) => date ? date.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' }) : '';
+    const formatDate = (date) => date ? date.toLocaleDateString('th-TH', { year: 'numeric', month: 'short', day: 'numeric' }) : '';
+
+    function showToast(message, type = 'success') {
+        const toast = document.createElement('div');
+        const styles = { success: 'bg-green-500', error: 'bg-red-500', info: 'bg-sky-500' };
+        const icons = { success: 'fa-check-circle', error: 'fa-times-circle', info: 'fa-info-circle' };
+        toast.className = `flex items-center text-white p-4 rounded-lg shadow-lg transform transition-all duration-300 translate-x-full opacity-0 ${styles[type]}`;
+        toast.innerHTML = `<i class="fas ${icons[type]} mr-3 text-xl"></i> <p>${message}</p>`;
+        getEl('toast-container').appendChild(toast);
+        setTimeout(() => toast.classList.remove('translate-x-full', 'opacity-0'), 10);
+        setTimeout(() => {
+            toast.classList.add('translate-x-full', 'opacity-0');
+            toast.addEventListener('transitionend', () => toast.remove());
+        }, 3000);
+    }
+
+    function showConfirm({ title, body, confirmText = 'ยืนยัน', confirmColor = 'bg-red-600', onConfirm }) {
+        const modalContainer = getEl('modal-container'), modalContent = getEl('modal-content');
+        const modalTitle = getEl('modal-title'), modalBody = getEl('modal-body'), modalConfirmBtn = getEl('modal-confirm'), modalCancelBtn = getEl('modal-cancel');
+        modalTitle.textContent = title;
+        modalBody.innerHTML = body; // Use innerHTML to allow for simple formatting
+        modalConfirmBtn.textContent = confirmText;
+        modalConfirmBtn.className = `px-4 py-2 text-white rounded-lg transition-colors ${confirmColor} hover:opacity-90`;
+        modalContainer.style.display = 'flex';
+        setTimeout(() => modalContent.classList.remove('opacity-0', '-translate-y-10'), 10);
+        const newConfirmBtn = modalConfirmBtn.cloneNode(true);
+        modalConfirmBtn.parentNode.replaceChild(newConfirmBtn, modalConfirmBtn);
+        const hideModal = () => {
+            modalContent.classList.add('opacity-0', '-translate-y-10');
+            modalContainer.addEventListener('transitionend', () => modalContainer.style.display = 'none', { once: true });
+        };
+        newConfirmBtn.addEventListener('click', () => { onConfirm(); hideModal(); });
+        modalCancelBtn.addEventListener('click', hideModal, { once: true });
+    }
+
+    function switchView(viewId) {
+        views.forEach(v => v.classList.remove('active'));
+        getEl(viewId)?.classList.add('active');
+        state.currentView = viewId.replace('-view', '');
+        updateNav();
+    }
+
+    function updateNav() {
+        const navConfig = {
+            recorder: [{ name: 'บันทึก', icon: 'fa-edit', view: 'recorder-view' }],
+            approver: [{ name: 'รอตรวจทาน', icon: 'fa-tasks', view: 'approver-view' }],
+            admin: [
+                { name: 'แดชบอร์ด', icon: 'fa-chart-pie', view: 'admin-view' },
+                { name: 'จัดการนักเรียน', icon: 'fa-users-cog', view: 'admin-students-view' },
+                { name: 'จัดการกฎ', icon: 'fa-gavel', view: 'admin-rules-view' }
+            ]
+        };
+        const navButtonsContainer = getEl('nav-buttons'), mobileMenuContainer = getEl('mobile-menu');
+        const buttons = navConfig[state.currentUser?.role] || [];
+        navButtonsContainer.innerHTML = '';
+        mobileMenuContainer.innerHTML = '';
+        navButtonsContainer.classList.toggle('hidden', buttons.length === 0);
+        buttons.forEach(btn => {
+            const btnHTML = `<button onclick="switchView('${btn.view}')" class="nav-btn ${state.currentView === btn.view.replace('-view', '') ? 'bg-indigo-100 text-indigo-700' : 'text-gray-600 hover:bg-gray-100'} font-semibold py-2 px-4 rounded-lg transition-colors flex items-center space-x-2"><i class="fas ${btn.icon}"></i><span>${btn.name}</span></button>`;
+            navButtonsContainer.innerHTML += btnHTML;
+            mobileMenuContainer.innerHTML += btnHTML.replace('py-2 px-4', 'py-3 px-4 w-full justify-start');
+        });
+        if (state.currentUser) {
+            const logoutBtnHTML = `<button onclick="logout()" class="text-red-500 hover:bg-red-100 font-semibold py-2 px-4 rounded-lg transition-colors flex items-center space-x-2"><i class="fas fa-sign-out-alt"></i><span>ออกจากระบบ</span></button>`;
+            navButtonsContainer.innerHTML += logoutBtnHTML;
+            mobileMenuContainer.innerHTML += logoutBtnHTML.replace('py-2 px-4', 'py-3 px-4 w-full justify-start');
+        }
+    }
+
+    function login(role) {
+        state.currentUser = appData.users[role];
+        const roleMap = { recorder: 'สภานักเรียน', approver: 'ครูเวร', admin: 'ผู้บริหาร' };
+        getEl('current-role-display').innerHTML = `บทบาท: <span class="font-semibold text-gray-700">${roleMap[role]}</span>`;
+        getEl('current-role-display').classList.remove('hidden');
+        const viewMap = { recorder: 'recorder-view', approver: 'approver-view', admin: 'admin-view' };
+        switchView(viewMap[role]);
+        if(role === 'approver') renderPendingList();
+        if(role === 'admin') { 
+            updateDashboard(); 
+            renderStudentManagementList();
+            renderRulesManagement(); 
+        }
+        if(role === 'recorder') {
+            renderDailySummary();
+            getEl('recorder-date').textContent = new Date().toLocaleDateString('th-TH', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+        }
+    }
+
+    function logout() {
+        state.currentUser = null; state.selectedStudent = null;
+        getEl('current-role-display').textContent = '';
+        getEl('current-role-display').classList.add('hidden');
+        switchView('login-view');
+    }
+
+    // --- 5. CORE EVENT HANDLERS ---
+    async function handleSaveRecord() {
+        if (!state.selectedStudent || !state.selectedReason || state.selectedSanctions.length === 0) return showToast('กรุณากรอกข้อมูลให้ครบ', 'error');
+        const otherReason = state.selectedReason === 'R06' ? getEl('other-reason-input').value.trim() : null;
+        if(appData.rules.reasons.find(r => r.id === state.selectedReason)?.name.includes('อื่น') && !otherReason) return showToast('กรุณาระบุเหตุผลอื่นๆ', 'error');
+        let otherSanctionText = null, otherSanctionPoints = null;
+        const otherSanctionRule = appData.rules.sanctions.find(s => s.name.includes('อื่น'));
+        if (otherSanctionRule && state.selectedSanctions.includes(otherSanctionRule.id)) {
+            otherSanctionText = getEl('other-sanction-input').value.trim();
+            otherSanctionPoints = parseInt(getEl('other-sanction-points').value) || 0;
+            if(!otherSanctionText) return showToast('กรุณาระบุมาตรการอื่นๆ', 'error');
+        }
+        const record = {
+            id: `TR${Date.now()}`, studentId: state.selectedStudent.id,
+            recordedBy: state.currentUser.id, recordedAt: new Date().toISOString(),
+            reasonId: state.selectedReason, otherReason: otherReason,
+            sanctionIds: state.selectedSanctions, otherSanction: otherSanctionText,
+            otherSanctionPoints: otherSanctionPoints, notes: getEl('notes').value,
+            totalPointsDelta: state.totalPointsDelta, status: 'PENDING'
+        };
+        const result = await apiCall('saveTardyRecord', record);
+        if (result) {
+            result.recordedAt = new Date(result.recordedAt);
+            appData.tardyRecords.unshift(result);
+            renderDailySummary();
+            showToast(`บันทึกข้อมูลของ ${state.selectedStudent.firstname} เรียบร้อย`);
+            getEl('student-search').value = ''; 
+            getEl('student-card').classList.add('hidden'); 
+            getEl('record-form').classList.add('hidden');
+            state.selectedStudent = null; 
+            getEl('student-search').focus();
+        }
+    }
+    
+    async function handleApproveRecord(recordId) {
+        const result = await apiCall('updateRecordStatus', { recordId, newStatus: 'APPROVED', user: state.currentUser });
+        if (result) {
+            showToast('อนุมัติรายการเรียบร้อยแล้ว');
+            const record = appData.tardyRecords.find(r => r.id === recordId);
+            if(record) record.status = 'APPROVED';
+            const student = appData.students.find(s => s.id === record.studentId);
+            if(student) student.points += record.totalPointsDelta;
+            renderPendingList();
+            updateDashboard();
+        }
+    }
+
+    function handleRejectRecord(recordId) {
+        showConfirm({
+            title: 'ปฏิเสธรายการ', body: 'คุณต้องการปฏิเสธรายการนี้ใช่หรือไม่?',
+            onConfirm: async () => {
+                const result = await apiCall('updateRecordStatus', { recordId, newStatus: 'REJECTED', user: state.currentUser });
+                if(result) {
+                    showToast('ปฏิเสธรายการแล้ว', 'info');
+                    const record = appData.tardyRecords.find(r => r.id === recordId);
+                    if(record) record.status = 'REJECTED';
+                    renderPendingList();
+                    updateDashboard();
+                }
+            }
+        });
+    }
+    
+    function handleApproveAll() {
+        const pendingIds = appData.tardyRecords.filter(r => r.status === 'PENDING').map(r => r.id);
+        if (pendingIds.length === 0) return;
+        showConfirm({
+            title: 'อนุมัติทั้งหมด', body: `คุณต้องการอนุมัติ ${pendingIds.length} รายการใช่หรือไม่?`,
+            confirmText: 'อนุมัติ', confirmColor: 'bg-green-600',
+            onConfirm: async () => {
+                const result = await apiCall('approveAllPending', { recordIds: pendingIds, user: state.currentUser });
+                if (result && result.success) {
+                    showToast(`อนุมัติ ${pendingIds.length} รายการเรียบร้อยแล้ว`);
+                    await fetchInitialData(); // Full refresh is safer after bulk operation
+                    renderPendingList();
+                    updateDashboard();
+                } else {
+                    showToast('เกิดข้อผิดพลาดในการอนุมัติทั้งหมด', 'error');
+                }
+            }
+        });
+    }
+
+    async function handleAddStudent(e) {
+        e.preventDefault();
+        const student = {
+            id: `S${Date.now()}`,
+            prefix: getEl('student-prefix').value,
+            class: getEl('student-class').value,
+            firstname: getEl('student-firstname').value,
+            lastname: getEl('student-lastname').value,
+            points: 100
+        };
+        if(!student.prefix || !student.class || !student.firstname || !student.lastname) return showToast('กรุณากรอกข้อมูลให้ครบ', 'error');
+        const result = await apiCall('addStudent', student);
+        if (result) {
+            appData.students.push(result);
+            renderStudentManagementList();
+            showToast(`เพิ่มนักเรียน "${student.prefix}${student.firstname}" เรียบร้อย`);
+            e.target.reset();
+        }
+    }
+    
+    function handleDeleteStudent(studentId) {
+        const student = appData.students.find(s => s.id === studentId);
+        const hasRecords = appData.tardyRecords.some(r => r.studentId === studentId);
+        let warningMessage = `คุณต้องการลบข้อมูลของ ${student.prefix}${student.firstname} ใช่หรือไม่?`;
+        if (hasRecords) {
+            warningMessage += '<br><strong class="text-red-600">การดำเนินการนี้จะลบประวัติการมาสายทั้งหมดของนักเรียนคนนี้ด้วย</strong>';
+        }
+
+        showConfirm({
+            title: 'ยืนยันการลบ', body: warningMessage,
+            onConfirm: async () => {
+                const result = await apiCall('deleteStudent', { studentId });
+                if (result) {
+                    appData.students = appData.students.filter(s => s.id !== studentId);
+                    appData.tardyRecords = appData.tardyRecords.filter(r => r.studentId !== studentId);
+                    renderStudentManagementList();
+                    updateDashboard();
+                    showToast('ลบข้อมูลนักเรียนแล้ว', 'info');
+                }
+            }
+        });
+    }
+
+    async function handleAddRule(event, type) {
+        event.preventDefault();
+        const id = getEl(`${type}-id`).value.trim().toUpperCase();
+        const name = getEl(`${type}-name`).value.trim();
+        const points = (type === 'sanction') ? getEl('sanction-points').value : null;
+
+        if (!id || !name || (type === 'sanction' && points === null)) {
+            return showToast('กรุณากรอกข้อมูลให้ครบถ้วน', 'error');
+        }
+        
+        const newRule = { id, name, type, points: (type === 'sanction') ? Number(points) : '' };
+        
+        const result = await apiCall('addRule', newRule);
+        if(result) {
+            showToast(`เพิ่ม '${name}' ในระบบเรียบร้อย`, 'success');
+            if(type === 'reason') appData.rules.reasons.push(result);
+            else appData.rules.sanctions.push(result);
+            
+            renderRulesManagement();
+            renderRecordOptions(); // Re-render recorder options
+            event.target.reset();
+        }
+    }
+
+    function handleDeleteRule(ruleId, ruleName) {
+        showConfirm({
+            title: 'ยืนยันการลบ',
+            body: `คุณต้องการลบ '${ruleName}' ออกจากระบบใช่หรือไม่?`,
+            onConfirm: async () => {
+                const result = await apiCall('deleteRule', { ruleId });
+                if (result && result.success) {
+                    showToast(`ลบ '${ruleName}' เรียบร้อย`, 'info');
+                    appData.rules.reasons = appData.rules.reasons.filter(r => r.id !== ruleId);
+                    appData.rules.sanctions = appData.rules.sanctions.filter(s => s.id !== ruleId);
+                    renderRulesManagement();
+                    renderRecordOptions(); // Re-render recorder options
+                }
+            }
+        });
+    }
+
+    // --- 6. MODAL & DYNAMIC CONTENT RENDERING ---
+    function handleEditStudent(studentId) {
+        state.editingItemId = studentId;
+        const student = appData.students.find(s => s.id === studentId);
+        if (!student) return;
+
+        getEl('edit-modal-title').textContent = 'แก้ไขข้อมูลนักเรียน';
+        getEl('edit-modal-body').innerHTML = `
+            <div class="space-y-4">
+                <div><label for="edit-student-class" class="block text-sm font-medium text-gray-700">ชั้น/ห้อง</label><input type="text" id="edit-student-class" value="${student.class}" class="mt-1 block w-full p-2 border border-gray-300 rounded-md"></div>
+                <div><label for="edit-student-prefix" class="block text-sm font-medium text-gray-700">คำนำหน้า</label><select id="edit-student-prefix" class="mt-1 block w-full p-2 border border-gray-300 rounded-md"><option ${student.prefix === 'เด็กชาย' ? 'selected' : ''}>เด็กชาย</option><option ${student.prefix === 'เด็กหญิง' ? 'selected' : ''}>เด็กหญิง</option><option ${student.prefix === 'นาย' ? 'selected' : ''}>นาย</option><option ${student.prefix === 'นางสาว' ? 'selected' : ''}>นางสาว</option></select></div>
+                <div><label for="edit-student-firstname" class="block text-sm font-medium text-gray-700">ชื่อจริง</label><input type="text" id="edit-student-firstname" value="${student.firstname}" class="mt-1 block w-full p-2 border border-gray-300 rounded-md"></div>
+                <div><label for="edit-student-lastname" class="block text-sm font-medium text-gray-700">นามสกุล</label><input type="text" id="edit-student-lastname" value="${student.lastname}" class="mt-1 block w-full p-2 border border-gray-300 rounded-md"></div>
+                <div><label for="edit-student-points" class="block text-sm font-medium text-gray-700">คะแนน</label><input type="number" id="edit-student-points" value="${student.points}" class="mt-1 block w-full p-2 border border-gray-300 rounded-md"></div>
+            </div>`;
+        
+        const saveButton = getEl('edit-modal-save');
+        const newSaveButton = saveButton.cloneNode(true);
+        saveButton.parentNode.replaceChild(newSaveButton, saveButton);
+        newSaveButton.addEventListener('click', handleSaveStudentChanges);
+        showEditModal();
+    }
+
+    async function handleSaveStudentChanges() {
+        const studentId = state.editingItemId;
+        const updatedStudentData = {
+            id: studentId,
+            class: getEl('edit-student-class').value,
+            prefix: getEl('edit-student-prefix').value,
+            firstname: getEl('edit-student-firstname').value,
+            lastname: getEl('edit-student-lastname').value,
+            points: parseInt(getEl('edit-student-points').value, 10),
+        };
+
+        if(!updatedStudentData.class || !updatedStudentData.firstname || !updatedStudentData.lastname) {
+            return showToast('กรุณากรอกข้อมูลให้ครบ', 'error');
+        }
+
+        const result = await apiCall('updateStudent', { student: updatedStudentData });
+        if (result && result.student) {
+            const index = appData.students.findIndex(s => s.id === studentId);
+            if (index !== -1) appData.students[index] = result.student;
+            hideEditModal();
+            renderStudentManagementList();
+            showToast('บันทึกข้อมูลนักเรียนเรียบร้อย', 'success');
+        } else {
+            showToast('ไม่สามารถบันทึกข้อมูลนักเรียนได้', 'error');
+        }
+    }
+    
+    function handleEditRule(ruleId) {
+        state.editingItemId = ruleId;
+        const rule = [...appData.rules.reasons, ...appData.rules.sanctions].find(r => r.id === ruleId);
+        if (!rule) return;
+
+        const isSanction = rule.type === 'sanction';
+        getEl('edit-modal-title').textContent = isSanction ? 'แก้ไขมาตรการ' : 'แก้ไขเหตุผล';
+
+        let bodyHtml = `
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">รหัส (ID)</label>
+                    <input type="text" value="${rule.id}" class="mt-1 block w-full p-2 border bg-gray-100 rounded-md" disabled>
+                </div>
+                <div>
+                    <label for="edit-rule-name" class="block text-sm font-medium text-gray-700">ชื่อ</label>
+                    <input type="text" id="edit-rule-name" value="${rule.name}" class="mt-1 block w-full p-2 border border-gray-300 rounded-md">
+                </div>
+        `;
+
+        if (isSanction) {
+            bodyHtml += `
+                <div>
+                    <label for="edit-rule-points" class="block text-sm font-medium text-gray-700">คะแนน (Points)</label>
+                    <input type="number" id="edit-rule-points" value="${rule.points}" class="mt-1 block w-full p-2 border border-gray-300 rounded-md">
+                </div>
+            `;
+        }
+        bodyHtml += `</div>`;
+
+        getEl('edit-modal-body').innerHTML = bodyHtml;
+        
+        const saveButton = getEl('edit-modal-save');
+        const newSaveButton = saveButton.cloneNode(true);
+        saveButton.parentNode.replaceChild(newSaveButton, saveButton);
+        newSaveButton.addEventListener('click', handleSaveRuleChanges);
+        showEditModal();
+    }
+
+    async function handleSaveRuleChanges() {
+        const ruleId = state.editingItemId;
+        const originalRule = [...appData.rules.reasons, ...appData.rules.sanctions].find(r => r.id === ruleId);
+        if (!originalRule) return;
+
+        const updatedRule = {
+            id: ruleId,
+            type: originalRule.type,
+            name: getEl('edit-rule-name').value.trim()
+        };
+        
+        if (originalRule.type === 'sanction') {
+            updatedRule.points = Number(getEl('edit-rule-points').value);
+        }
+
+        if (!updatedRule.name) {
+            return showToast('กรุณากรอกชื่อ', 'error');
+        }
+
+        const result = await apiCall('updateRule', { rule: updatedRule });
+
+        if (result && result.rule) {
+            if (updatedRule.type === 'reason') {
+                const index = appData.rules.reasons.findIndex(r => r.id === ruleId);
+                if (index !== -1) appData.rules.reasons[index] = result.rule;
+            } else {
+                const index = appData.rules.sanctions.findIndex(s => s.id === ruleId);
+                if (index !== -1) appData.rules.sanctions[index] = result.rule;
+            }
+            hideEditModal();
+            renderRulesManagement();
+            renderRecordOptions();
+            showToast('บันทึกการเปลี่ยนแปลงเรียบร้อย', 'success');
+        }
+    }
+
+    function handleEditTardyRecord(recordId) {
+        state.editingItemId = recordId;
+        const record = appData.tardyRecords.find(r => r.id === recordId);
+        const student = appData.students.find(s => s.id === record.studentId);
+        if (!record || !student) return;
+        
+        getEl('edit-modal-title').textContent = 'แก้ไขข้อมูลการมาสาย';
+        const modalBody = getEl('edit-modal-body');
+        const reasonsHtml = appData.rules.reasons.map(r => `<option value="${r.id}" ${record.reasonId === r.id ? 'selected' : ''}>${r.name}</option>`).join('');
+        const sanctionsHtml = appData.rules.sanctions.map(s => `<label class="flex items-center space-x-2"><input type="checkbox" name="edit-sanction" value="${s.id}" ${(Array.isArray(record.sanctionIds) && record.sanctionIds.includes(s.id)) ? 'checked' : ''} class="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"><span>${s.name} (${s.points > 0 ? '+' : ''}${s.points})</span></label>`).join('');
+        modalBody.innerHTML = `<p><span class="font-semibold">นักเรียน:</span> ${student.prefix}${student.firstname} ${student.lastname}</p><p><span class="font-semibold">เวลา:</span> ${formatDate(record.recordedAt)} ${formatTime(record.recordedAt)}</p><div><label class="block font-semibold text-sm mb-1">เหตุผล</label><select id="edit-reason" class="w-full p-2 border rounded-md">${reasonsHtml}</select></div><div><label class="block font-semibold text-sm mb-1">มาตรการลงโทษ</label><div id="edit-sanctions" class="grid grid-cols-2 gap-2 p-2 border rounded-md">${sanctionsHtml}</div></div><div><label class="block font-semibold text-sm mb-1">หมายเหตุ</label><textarea id="edit-notes" class="w-full p-2 border rounded-md" rows="3">${record.notes || ''}</textarea></div><p class="text-right font-bold">คะแนนรวม: <span id="edit-total-points" class="${record.totalPointsDelta < 0 ? 'text-red-500' : 'text-green-500'}">${record.totalPointsDelta > 0 ? '+' : ''}${record.totalPointsDelta}</span></p>`;
+        
+        modalBody.querySelectorAll('input[name="edit-sanction"]').forEach(el => {
+            el.addEventListener('change', () => {
+                const selectedSanctions = Array.from(modalBody.querySelectorAll('input[name="edit-sanction"]:checked')).map(el => el.value);
+                const total = selectedSanctions.reduce((sum, id) => sum + (appData.rules.sanctions.find(s => s.id === id)?.points || 0), 0);
+                const totalPointsEl = getEl('edit-total-points');
+                totalPointsEl.textContent = `${total > 0 ? '+' : ''}${total}`;
+                totalPointsEl.className = `font-bold ${total < 0 ? 'text-red-500' : 'text-green-500'}`;
+            });
+        });
+
+        const saveButton = getEl('edit-modal-save');
+        const newSaveButton = saveButton.cloneNode(true);
+        saveButton.parentNode.replaceChild(newSaveButton, saveButton);
+        newSaveButton.addEventListener('click', handleSaveTardyChanges);
+        showEditModal();
+    }
+    
+    async function handleSaveTardyChanges() {
+        const record = appData.tardyRecords.find(r => r.id === state.editingItemId);
+        if (!record) return;
+        const newSanctionIds = Array.from(getEl('edit-modal-body').querySelectorAll('input[name="edit-sanction"]:checked')).map(el => el.value);
+        const newTotalPoints = newSanctionIds.reduce((sum, id) => sum + (appData.rules.sanctions.find(s => s.id === id)?.points || 0), 0);
+        const payload = {
+            ...record, recordedAt: record.recordedAt.toISOString(),
+            reasonId: getEl('edit-reason').value, sanctionIds: newSanctionIds,
+            notes: getEl('edit-notes').value, totalPointsDelta: newTotalPoints,
+        };
+        const result = await apiCall('updateTardyRecord', payload);
+        if (result && result.record) {
+            hideEditModal();
+            showToast('บันทึกการเปลี่ยนแปลงเรียบร้อยแล้ว');
+            await fetchInitialData(); // Refresh needed due to point changes
+            renderAllRecordsList();
+            renderPendingList();
+            updateDashboard();
+        }
+    }
+
+    function showEditModal() {
+        const modalContainer = getEl('edit-modal-container'), modalContent = getEl('edit-modal-content');
+        modalContainer.style.display = 'flex';
+        setTimeout(()=> modalContent.classList.remove('opacity-0', '-translate-y-10'), 10);
+    }
+    function hideEditModal() {
+        const modalContainer = getEl('edit-modal-container'), modalContent = getEl('edit-modal-content');
+        modalContent.classList.add('opacity-0', '-translate-y-10');
+        modalContainer.addEventListener('transitionend', () => {
+            modalContainer.style.display = 'none';
+            state.editingItemId = null;
+        }, { once: true });
+    }
+    
+    // --- 7. VIEW RENDERING FUNCTIONS ---
+    function renderRecordOptions() {
+        const reasonContainer = getEl('reason-options');
+        const sanctionContainer = getEl('sanction-options');
+        if (!reasonContainer || !sanctionContainer) return;
+        reasonContainer.innerHTML = appData.rules.reasons.map(r => `<label class="form-option"><input type="radio" name="reason" value="${r.id}" class="sr-only"><div class="p-3 border rounded-lg text-center cursor-pointer transition-all">${r.name}</div></label>`).join('');
+        sanctionContainer.innerHTML = appData.rules.sanctions.map(s => {
+            const pointsDisplay = (s.points !== '' && s.points !== null) ? ` <span class="font-bold">(${s.points > 0 ? '+' : ''}${s.points})</span>` : '';
+            return `<label class="form-option"><input type="checkbox" name="sanction" value="${s.id}" class="sr-only"><div class="p-3 border rounded-lg text-center cursor-pointer transition-all">${s.name}${pointsDisplay}</div></label>`;
+        }).join('');
+        document.querySelectorAll('input[name="reason"], input[name="sanction"]').forEach(el => el.addEventListener('change', updateTotalPoints));
+    }
+    function updateTotalPoints() {
+        const reasonChecked = document.querySelector('input[name="reason"]:checked');
+        state.selectedReason = reasonChecked ? reasonChecked.value : null;
+        state.selectedSanctions = Array.from(document.querySelectorAll('input[name="sanction"]:checked')).map(el => el.value);
+        let total = state.selectedSanctions.reduce((sum, id) => {
+            const sanction = appData.rules.sanctions.find(s => s.id === id);
+            if (sanction && sanction.name.includes('อื่น')) return sum;
+            return sum + (sanction?.points || 0);
+        }, 0);
+
+        const otherReasonRule = appData.rules.reasons.find(r => r.name.includes('อื่น'));
+        const otherReasonContainer = getEl('other-reason-container');
+        if (otherReasonRule && state.selectedReason === otherReasonRule.id) {
+             otherReasonContainer.classList.remove('hidden');
+        } else { 
+             otherReasonContainer.classList.add('hidden'); getEl('other-reason-input').value = ''; 
+        }
+
+        const otherSanctionRule = appData.rules.sanctions.find(s => s.name.includes('อื่น'));
+        const otherSanctionContainer = getEl('other-sanction-container');
+        if (otherSanctionRule && state.selectedSanctions.includes(otherSanctionRule.id)) {
+            otherSanctionContainer.classList.remove('hidden');
+            total += parseInt(getEl('other-sanction-points').value) || 0;
+        } else {
+            otherSanctionContainer.classList.add('hidden');
+            getEl('other-sanction-input').value = ''; getEl('other-sanction-points').value = '';
+        }
+        state.totalPointsDelta = total;
+        getEl('total-points').textContent = `${total >= 0 ? '+' : ''}${total}`;
+        getEl('total-points').className = `font-bold ${total < 0 ? 'text-red-500' : (total > 0 ? 'text-green-500' : 'text-gray-700')}`;
+    }
+    function selectStudent(studentId) {
+        state.selectedStudent = appData.students.find(s => s.id === studentId);
+        getEl('search-results').classList.add('hidden');
+        getEl('student-search').value = `${state.selectedStudent.prefix}${state.selectedStudent.firstname} ${state.selectedStudent.lastname}`;
+        getEl('student-card').innerHTML = `<div class="flex items-center space-x-4"><div class="w-16 h-16 bg-gray-300 rounded-full flex items-center justify-center text-2xl text-white font-bold">${state.selectedStudent.firstname[0]}</div><div><p class="font-bold text-lg">${state.selectedStudent.prefix}${state.selectedStudent.firstname} ${state.selectedStudent.lastname}</p><p class="text-gray-600">ห้อง ${state.selectedStudent.class}</p><p class="text-sm">คะแนนคงเหลือ: <span class="font-bold text-indigo-600">${state.selectedStudent.points}</span></p></div></div>`;
+        getEl('student-card').classList.remove('hidden');
+        getEl('record-form').classList.remove('hidden');
+        getEl('timestamp').textContent = formatTime(new Date());
+        resetRecordForm();
+    }
+    function resetRecordForm() {
+        state.selectedReason = null; state.selectedSanctions = []; state.totalPointsDelta = 0;
+        document.querySelectorAll('input[name="reason"], input[name="sanction"]').forEach(el => el.checked = false);
+        document.querySelectorAll('.form-option input:checked + div').forEach(div => div.removeAttribute('style'));
+        getEl('notes').value = '';
+        updateTotalPoints();
+    }
+    function renderDailySummary() {
+        const container = getEl('daily-summary');
+        const todaysRecords = appData.tardyRecords.filter(r => new Date(r.recordedAt).toDateString() === new Date().toDateString());
+        if (todaysRecords.length === 0) { container.innerHTML = `<p class="text-gray-500 text-center pt-8">ยังไม่มีการบันทึก...</p>`; return; }
+        const statusStyles = { PENDING: 'bg-yellow-100 text-yellow-800', APPROVED: 'bg-green-100 text-green-800', REJECTED: 'bg-red-100 text-red-800'};
+        container.innerHTML = [...todaysRecords].reverse().map(r => { const s = appData.students.find(st => st.id === r.studentId); return `<div class="p-3 border rounded-lg bg-slate-50"><div class="flex justify-between items-start"><div><p class="font-semibold">${s.prefix}${s.firstname} ${s.lastname}</p><p class="text-sm text-gray-500">${formatTime(r.recordedAt)}</p></div><span class="px-2 py-1 text-xs font-semibold rounded-full ${statusStyles[r.status]}">${r.status}</span></div></div>`; }).join('');
+    }
+    function renderPendingList() {
+        const container = getEl('pending-list');
+        const approveBtn = getEl('approve-all');
+        const pending = appData.tardyRecords.filter(r => r.status === 'PENDING');
+        if (pending.length === 0) {
+            container.innerHTML = `<tr><td colspan="8" class="text-center p-8 text-gray-500">ไม่มีรายการรออนุมัติ</td></tr>`;
+            approveBtn.disabled = true; approveBtn.classList.add('opacity-50', 'cursor-not-allowed'); return;
+        }
+        approveBtn.disabled = false; approveBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+        container.innerHTML = pending.map(r => {
+            const s = appData.students.find(st => st.id === r.studentId);
+            const rec = Object.values(appData.users).find(u => u.id === r.recordedBy);
+            const rea = appData.rules.reasons.find(re => re.id === r.reasonId);
+            let reasonDisplay = rea ? rea.name : 'ไม่ระบุ';
+            if (rea && rea.name.includes('อื่น') && r.otherReason) reasonDisplay = `<span class="font-semibold">${rea.name}:</span> ${r.otherReason}`;
+            const sanDisplay = (r.sanctionIds || []).map(id => {
+                const sanction = appData.rules.sanctions.find(sa => sa.id === id);
+                if (sanction && sanction.name.includes('อื่น') && r.otherSanction) return `<span class="font-semibold">${r.otherSanction}</span> <span class="font-bold">(${r.otherSanctionPoints > 0 ? '+' : ''}${r.otherSanctionPoints} คะแนน)</span>`;
+                return sanction ? `${sanction.name} (${sanction.points > 0 ? '+' : ''}${sanction.points})` : '';
+            }).join('<br>');
+            return `<tr class="border-b hover:bg-slate-50"><td class="p-3">${formatTime(r.recordedAt)}</td><td class="p-3 font-semibold">${s.prefix}${s.firstname} ${s.lastname}</td><td class="p-3">${s.class}</td><td class="p-3 text-sm">${reasonDisplay}</td><td class="p-3 text-sm">${sanDisplay}</td><td class="p-3 font-bold ${r.totalPointsDelta < 0 ? 'text-red-500' : 'text-green-500'}">${r.totalPointsDelta > 0 ? '+' : ''}${r.totalPointsDelta}</td><td class="p-3">${rec.name}</td><td class="p-3 text-center space-x-2"><button onclick="handleApproveRecord('${r.id}')" class="text-green-600 hover:text-green-800"><i class="fas fa-check-circle text-xl"></i></button><button onclick="handleRejectRecord('${r.id}')" class="text-red-600 hover:text-red-800"><i class="fas fa-times-circle text-xl"></i></button></td></tr>`;
+        }).join('');
+    }
+    function updateDashboard() {
+        const todayStr = new Date().toDateString(); const { tardyRecords, students } = appData;
+        getEl('stat-late-today').textContent = tardyRecords.filter(r => new Date(r.recordedAt).toDateString() === todayStr && r.status === 'APPROVED').length;
+        getEl('stat-pending').textContent = tardyRecords.filter(r => r.status === 'PENDING').length;
+        getEl('stat-late-month').textContent = tardyRecords.filter(r => new Date(r.recordedAt).getMonth() === new Date().getMonth() && r.status === 'APPROVED').length;
+        getEl('stat-risk-students').textContent = students.filter(s => s.points <= 90).length;
+        renderAllRecordsList(); renderTopReasons();
+    }
+    function renderAllRecordsList() {
+        const container = getEl('all-records-list'); 
+        if (appData.tardyRecords.length === 0) { container.innerHTML = `<tr><td colspan="6" class="text-center p-8 text-gray-500">ไม่มีข้อมูลการมาสาย</td></tr>`; return; }
+        const statusStyles = { PENDING: 'bg-yellow-100 text-yellow-800', APPROVED: 'bg-green-100 text-green-800', REJECTED: 'bg-red-100 text-red-800'};
+        container.innerHTML = [...appData.tardyRecords].sort((a,b) => b.recordedAt - a.recordedAt).map(r => { const s = appData.students.find(st => st.id === r.studentId); return `<tr class="border-b"><td class="p-3">${formatDate(r.recordedAt)} ${formatTime(r.recordedAt)}</td><td class="p-3 font-semibold">${s.prefix}${s.firstname} ${s.lastname}</td><td class="p-3">${s.class}</td><td class="p-3 font-bold ${r.totalPointsDelta < 0 ? 'text-red-500' : 'text-green-500'}">${r.totalPointsDelta > 0 ? '+' : ''}${r.totalPointsDelta}</td><td class="p-3"><span class="px-2 py-1 text-xs font-semibold rounded-full ${statusStyles[r.status]}">${r.status}</span></td><td class="p-3 text-center"><button onclick="handleEditTardyRecord('${r.id}')" class="text-indigo-600 hover:text-indigo-800"><i class="fas fa-pencil-alt"></i></button></td></tr>`; }).join('');
+    }
+    function renderTopReasons() {
+        const container = getEl('top-reasons');
+        const counts = appData.tardyRecords.reduce((acc, r) => { acc[r.reasonId] = (acc[r.reasonId] || 0) + 1; return acc; }, {});
+        const sorted = Object.entries(counts).map(([id, count]) => ({ reason: appData.rules.reasons.find(re => re.id === id), count })).filter(item => item.reason).sort((a, b) => b.count - a.count).slice(0, 5);
+        if (sorted.length === 0) { container.innerHTML = `<p class="text-gray-500">ไม่มีข้อมูล</p>`; return; }
+        const total = sorted.reduce((sum, item) => sum + item.count, 0);
+        container.innerHTML = sorted.map(item => `<div class="relative"><div class="flex justify-between items-center mb-1"><span class="text-sm">${item.reason.name}</span><span class="text-sm font-semibold">${item.count} ครั้ง</span></div><div class="w-full bg-slate-200 rounded-full h-2"><div class="bg-sky-500 h-2 rounded-full" style="width: ${total > 0 ? (item.count/total)*100 : 0}%"></div></div></div>`).join('');
+    }
+    function renderStudentManagementList(studentsToRender = appData.students) {
+        const sortedStudents = [...studentsToRender].sort((a, b) => (a.class.localeCompare(b.class, 'th')) || (a.firstname.localeCompare(b.firstname, 'th')));
+        const listEl = getEl('student-management-list');
+        if (sortedStudents.length === 0) {
+            listEl.innerHTML = '<tr><td colspan="4" class="text-center p-8 text-gray-500">ไม่พบข้อมูลนักเรียน</td></tr>';
+            return;
+        }
+        listEl.innerHTML = sortedStudents.map(s => `
+            <tr class="border-b hover:bg-slate-50">
+                <td class="p-3">${s.class}</td>
+                <td class="p-3 font-semibold">${s.prefix}${s.firstname} ${s.lastname}</td>
+                <td class="p-3">${s.points}</td>
+                <td class="p-3 text-center space-x-2">
+                    <button onclick="handleEditStudent('${s.id}')" class="text-indigo-600 hover:text-indigo-800 transition-colors"><i class="fas fa-edit"></i></button>
+                    <button onclick="handleDeleteStudent('${s.id}')" class="text-red-500 hover:text-red-700 transition-colors"><i class="fas fa-trash-alt"></i></button>
+                </td>
+            </tr>`).join('');
+    }
+
+    function renderRulesManagement() {
+        const reasonsContainer = getEl('reasons-management-list');
+        const sanctionsContainer = getEl('sanctions-management-list');
+        if (!reasonsContainer || !sanctionsContainer) return;
+        
+        reasonsContainer.innerHTML = appData.rules.reasons.map(r => `
+            <div class="flex justify-between items-center p-2 rounded-md bg-gray-50">
+                <span><span class="font-mono text-xs bg-gray-200 px-1 py-0.5 rounded">${r.id}</span> ${r.name}</span>
+                <div class="space-x-3">
+                    <button onclick="handleEditRule('${r.id}')" class="text-indigo-600 hover:text-indigo-800"><i class="fas fa-edit"></i></button>
+                    <button onclick="handleDeleteRule('${r.id}', '${r.name}')" class="text-red-500 hover:text-red-700"><i class="fas fa-trash-alt"></i></button>
+                </div>
+            </div>`).join('') || `<p class="text-gray-500 text-center text-sm">ไม่มีข้อมูล</p>`;
+            
+        sanctionsContainer.innerHTML = appData.rules.sanctions.map(s => `
+            <div class="flex justify-between items-center p-2 rounded-md bg-gray-50">
+                <span><span class="font-mono text-xs bg-gray-200 px-1 py-0.5 rounded">${s.id}</span> ${s.name}</span>
+                <div class="flex items-center space-x-3">
+                    <span class="font-bold w-12 text-center ${s.points < 0 ? 'text-red-500' : (s.points > 0 ? 'text-green-500' : 'text-gray-600')}">(${s.points > 0 ? '+' : ''}${s.points})</span>
+                    <button onclick="handleEditRule('${s.id}')" class="text-indigo-600 hover:text-indigo-800"><i class="fas fa-edit"></i></button>
+                    <button onclick="handleDeleteRule('${s.id}', '${s.name}')" class="text-red-500 hover:text-red-700"><i class="fas fa-trash-alt"></i></button>
+                </div>
+            </div>`).join('') || `<p class="text-gray-500 text-center text-sm">ไม่มีข้อมูล</p>`;
+    }
+    
+    // --- 8. INITIALIZATION ---
+    function attachEventListeners() {
+        getEl('mobile-menu-button').addEventListener('click', () => getEl('mobile-menu').classList.toggle('hidden'));
+        getEl('save-record')?.addEventListener('click', handleSaveRecord);
+        getEl('other-sanction-points')?.addEventListener('input', updateTotalPoints);
+        getEl('approve-all')?.addEventListener('click', handleApproveAll);
+        getEl('add-student-form')?.addEventListener('submit', handleAddStudent);
+        
+        getEl('add-reason-form')?.addEventListener('submit', (e) => handleAddRule(e, 'reason'));
+        getEl('add-sanction-form')?.addEventListener('submit', (e) => handleAddRule(e, 'sanction'));
+
+        getEl('excel-file-input')?.addEventListener('change', (e) => {
+            const file = e.target.files[0]; if (!file) return;
+            getEl('file-name-display').textContent = `กำลังอ่าน: ${file.name}`;
+            const reader = new FileReader();
+            reader.onload = (event) => {
+                try {
+                    const data = new Uint8Array(event.target.result);
+                    const workbook = XLSX.read(data, { type: 'array' });
+                    const worksheet = workbook.Sheets[workbook.SheetNames[0]];
+                    const json = XLSX.utils.sheet_to_json(worksheet);
+                    
+                    const newStudents = json.map((row, i) => {
+                        if (row.prefix && row.class && row.firstname && row.lastname) {
+                            return { id: `S${Date.now() + i}`, prefix: String(row.prefix), class: String(row.class), firstname: String(row.firstname), lastname: String(row.lastname), points: 100 };
+                        }
+                        return null;
+                    }).filter(Boolean); // Filter out null values
+
+                    if (newStudents.length > 0) {
+                        showConfirm({
+                            title: 'ยืนยันการนำเข้า',
+                            body: `พบข้อมูลนักเรียนที่ถูกต้อง ${newStudents.length} คน ต้องการเพิ่มเข้าสู่ระบบหรือไม่?`,
+                            confirmText: 'นำเข้า', confirmColor: 'bg-indigo-600',
+                            onConfirm: async () => {
+                                const result = await apiCall('importStudents', { students: newStudents });
+                                if (result && result.success) {
+                                    showToast(`นำเข้าข้อมูลนักเรียน ${newStudents.length} คนสำเร็จ`);
+                                    await fetchInitialData();
+                                    renderStudentManagementList();
+                                }
+                            }
+                        });
+                    } else {
+                        showToast('ไม่พบข้อมูลที่ถูกต้องในไฟล์ (ต้องมีคอลัมน์: prefix, class, firstname, lastname)', 'error');
+                    }
+                } catch (error) { showToast('เกิดข้อผิดพลาดในการอ่านไฟล์', 'error');
+                } finally { e.target.value = ''; getEl('file-name-display').textContent = ''; }
+            };
+            reader.readAsArrayBuffer(file);
+        });
+        getEl('edit-modal-cancel').addEventListener('click', hideEditModal);
+        
+        const studentSearchInput = getEl('student-search');
+        studentSearchInput?.addEventListener('input', (e) => {
+            const q = e.target.value.toLowerCase();
+            const resultsContainer = getEl('search-results');
+            if (q.length < 1) { resultsContainer.classList.add('hidden'); return; }
+            const results = appData.students.filter(s => `${s.prefix}${s.firstname} ${s.lastname} ${s.class}`.toLowerCase().includes(q));
+            resultsContainer.innerHTML = results.map(s => `<div class="p-3 hover:bg-gray-100 cursor-pointer" onclick="selectStudent('${s.id}')"><p class="font-semibold">${s.prefix}${s.firstname} ${s.lastname}</p><p class="text-sm text-gray-500">ห้อง ${s.class}</p></div>`).join('');
+            resultsContainer.classList.toggle('hidden', results.length === 0);
+        });
+        studentSearchInput?.addEventListener('blur', (e) => {
+            setTimeout(() => getEl('search-results').classList.add('hidden'), 200);
+        });
+        getEl('student-management-search')?.addEventListener('input', (e) => {
+            const query = e.target.value.toLowerCase();
+            const filtered = appData.students.filter(s => `${s.prefix}${s.firstname} ${s.lastname} ${s.class}`.toLowerCase().includes(query));
+            renderStudentManagementList(filtered);
+        });
+    }
+
+    function init() {
+        getEl('login-view').innerHTML = `<h2 class="text-2xl font-semibold mb-2">ยินดีต้อนรับ</h2><p class="text-gray-500 mb-8">กรุณาเลือกบทบาทของคุณเพื่อเริ่มต้นใช้งาน</p><div class="grid grid-cols-1 md:grid-cols-3 gap-6"><button onclick="login('recorder')" class="group flex flex-col items-center p-6 bg-white hover:bg-indigo-600 rounded-xl transition-all duration-300 transform hover:-translate-y-2 shadow-lg hover:shadow-indigo-200 border"><div class="bg-indigo-100 group-hover:bg-white text-indigo-600 p-4 rounded-full transition-all duration-300 mb-4"><i class="fas fa-user-edit text-3xl"></i></div><span class="text-xl font-semibold text-gray-700 group-hover:text-white">สภานักเรียน</span><span class="text-sm text-gray-500 group-hover:text-indigo-200">(ผู้บันทึก)</span></button><button onclick="login('approver')" class="group flex flex-col items-center p-6 bg-white hover:bg-green-600 rounded-xl transition-all duration-300 transform hover:-translate-y-2 shadow-lg hover:shadow-green-200 border"><div class="bg-green-100 group-hover:bg-white text-green-600 p-4 rounded-full transition-all duration-300 mb-4"><i class="fas fa-user-check text-3xl"></i></div><span class="text-xl font-semibold text-gray-700 group-hover:text-white">ครูเวร</span><span class="text-sm text-gray-500 group-hover:text-green-200">(ผู้อนุมัติ)</span></button><button onclick="login('admin')" class="group flex flex-col items-center p-6 bg-white hover:bg-sky-600 rounded-xl transition-all duration-300 transform hover:-translate-y-2 shadow-lg hover:shadow-sky-200 border"><div class="bg-sky-100 group-hover:bg-white text-sky-600 p-4 rounded-full transition-all duration-300 mb-4"><i class="fas fa-chart-pie text-3xl"></i></div><span class="text-xl font-semibold text-gray-700 group-hover:text-white">ผู้บริหาร</span><span class="text-sm text-gray-500 group-hover:text-sky-200">(แดชบอร์ด & จัดการ)</span></button></div>`;
+        getEl('recorder-view').innerHTML = `<div class="grid grid-cols-1 lg:grid-cols-3 gap-6"><div class="lg:col-span-2 bg-white p-6 rounded-xl shadow-sm"><div class="flex justify-between items-center mb-4"><h2 class="text-xl font-bold">บันทึกการมาสาย</h2><p id="recorder-date" class="text-gray-600 font-semibold"></p></div><div class="relative mb-4"><i class="fas fa-search absolute left-4 top-1/2 -translate-y-1/2 text-gray-400"></i><input type="text" id="student-search" placeholder="ค้นหานักเรียน (ชื่อ, ห้อง)..." class="w-full p-3 pl-12 border rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none transition-shadow"><div id="search-results" class="absolute z-10 w-full bg-white border rounded-lg mt-1 max-h-60 overflow-y-auto hidden shadow-lg"></div></div><div id="student-card" class="hidden p-4 mb-4 bg-slate-50 rounded-lg border"></div><div id="record-form" class="hidden"><div class="mb-4"><p class="text-sm text-gray-600">เวลาที่บันทึก: <span id="timestamp" class="font-semibold text-gray-800"></span></p></div><div class="mb-6"><h3 class="font-semibold mb-3 text-lg">เหตุผล (เลือก 1 ข้อ)</h3><div id="reason-options" class="grid grid-cols-2 md:grid-cols-3 gap-3"></div><div id="other-reason-container" class="hidden mt-2"><textarea id="other-reason-input" rows="2" class="w-full p-2 border rounded-lg" placeholder="โปรดระบุเหตุผล..."></textarea></div></div><div class="mb-6"><h3 class="font-semibold mb-3 text-lg">มาตรการ/การลงโทษ</h3><div id="sanction-options" class="grid grid-cols-2 md:grid-cols-3 gap-3"></div><div id="other-sanction-container" class="hidden mt-2 grid grid-cols-1 md:grid-cols-3 gap-2 items-center"><textarea id="other-sanction-input" rows="2" class="w-full p-2 border rounded-lg md:col-span-2" placeholder="โปรดระบุมาตรการ..."></textarea><input type="number" id="other-sanction-points" class="w-full p-2 border rounded-lg" placeholder="คะแนน (เช่น -2, +1)"></div></div><div class="mb-6"><label for="notes" class="block font-semibold mb-2">หมายเหตุเพิ่มเติม</label><textarea id="notes" rows="3" class="w-full p-3 border rounded-lg" placeholder="เช่น มีใบรับรองแพทย์..."></textarea></div><div class="flex flex-col md:flex-row items-center justify-between gap-4"><p class="text-lg font-bold">คะแนนรวม: <span id="total-points" class="text-green-500">0</span></p><button id="save-record" class="w-full md:w-auto bg-indigo-600 text-white font-bold py-3 px-8 rounded-lg hover:bg-indigo-700 transition-all transform hover:scale-105 shadow-md"><i class="fas fa-save mr-2"></i><span>บันทึกข้อมูล</span></button></div></div></div><div class="bg-white p-6 rounded-xl shadow-sm"><h3 class="text-xl font-bold mb-4">สรุปการบันทึกวันนี้</h3><div id="daily-summary" class="space-y-3 max-h-[500px] overflow-y-auto"><p class="text-gray-500 text-center pt-8">ยังไม่มีการบันทึก...</p></div></div></div>`;
+        getEl('approver-view').innerHTML = `<div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-4 gap-3"><h2 class="text-xl font-bold">รายการรอตรวจทาน</h2><button id="approve-all" class="w-full md:w-auto bg-green-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-green-700 shadow-md"><i class="fas fa-check-double"></i><span>อนุมัติทั้งหมด</span></button></div><div class="overflow-x-auto"><table class="w-full text-left"><thead class="bg-slate-100 text-gray-600 uppercase text-sm"><tr><th class="p-3 rounded-l-lg">เวลา</th><th class="p-3">ชื่อ-สกุล</th><th class="p-3">ห้อง</th><th class="p-3">เหตุผล</th><th class="p-3">มาตรการ</th><th class="p-3">คะแนน</th><th class="p-3">ผู้บันทึก</th><th class="p-3 text-center rounded-r-lg">จัดการ</th></tr></thead><tbody id="pending-list"></tbody></table></div>`;
+        getEl('admin-view').innerHTML = `<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6"><div class="bg-gradient-to-br from-red-500 to-orange-400 text-white p-6 rounded-xl shadow-lg"><div class="flex justify-between items-center"><div><p class="text-lg font-semibold">มาสาย (วันนี้)</p><p id="stat-late-today" class="text-4xl font-bold">0</p></div><i class="fas fa-user-clock text-4xl opacity-50"></i></div></div><div class="bg-gradient-to-br from-amber-500 to-yellow-400 text-white p-6 rounded-xl shadow-lg"><div class="flex justify-between items-center"><div><p class="text-lg font-semibold">รออนุมัติ</p><p id="stat-pending" class="text-4xl font-bold">0</p></div><i class="fas fa-hourglass-half text-4xl opacity-50"></i></div></div><div class="bg-gradient-to-br from-sky-500 to-cyan-400 text-white p-6 rounded-xl shadow-lg"><div class="flex justify-between items-center"><div><p class="text-lg font-semibold">มาสาย (เดือนนี้)</p><p id="stat-late-month" class="text-4xl font-bold">0</p></div><i class="fas fa-chart-line text-4xl opacity-50"></i></div></div><div class="bg-gradient-to-br from-violet-500 to-purple-400 text-white p-6 rounded-xl shadow-lg"><div class="flex justify-between items-center"><div><p class="text-lg font-semibold">คะแนนเสี่ยง</p><p id="stat-risk-students" class="text-4xl font-bold">0</p></div><i class="fas fa-exclamation-triangle text-4xl opacity-50"></i></div></div></div><div class="grid grid-cols-1 lg:grid-cols-3 gap-6"><div class="lg:col-span-2 bg-white p-6 rounded-xl shadow-sm"><h3 class="text-lg font-bold mb-4">ภาพรวมการมาสายทั้งหมด</h3><div class="overflow-y-auto max-h-96"><table class="w-full text-left"><thead class="bg-slate-100 text-gray-600 sticky top-0 text-sm"><tr><th class="p-3 rounded-l-lg">เวลา</th><th class="p-3">ชื่อ-สกุล</th><th class="p-3">ห้อง</th><th class="p-3">คะแนน</th><th class="p-3">สถานะ</th><th class="p-3 rounded-r-lg text-center">จัดการ</th></tr></thead><tbody id="all-records-list"></tbody></table></div></div><div class="bg-white p-6 rounded-xl shadow-sm"><h3 class="text-lg font-bold mb-4">5 เหตุผลยอดฮิต</h3><div id="top-reasons" class="space-y-4"></div></div></div>`;
+        getEl('admin-students-view').innerHTML = `<div class="grid grid-cols-1 lg:grid-cols-3 gap-6"><div class="lg:col-span-1 space-y-6"><div class="bg-white p-6 rounded-xl shadow-sm"><h3 class="text-lg font-bold mb-4">เพิ่มนักเรียนใหม่</h3><form id="add-student-form" class="space-y-4"><div><label for="student-class" class="block text-sm font-medium">ชั้น/ห้อง</label><input type="text" id="student-class" required class="mt-1 block w-full p-2 border border-gray-300 rounded-md" placeholder="เช่น ม.6/1"></div><div><label for="student-prefix" class="block text-sm font-medium">คำนำหน้า</label><select id="student-prefix" required class="mt-1 block w-full p-2 border border-gray-300 rounded-md"><option>เด็กชาย</option><option>เด็กหญิง</option><option>นาย</option><option>นางสาว</option></select></div><div><label for="student-firstname" class="block text-sm font-medium">ชื่อจริง</label><input type="text" id="student-firstname" required class="mt-1 block w-full p-2 border border-gray-300 rounded-md"></div><div><label for="student-lastname" class="block text-sm font-medium">นามสกุล</label><input type="text" id="student-lastname" required class="mt-1 block w-full p-2 border border-gray-300 rounded-md"></div><button type="submit" class="w-full bg-indigo-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-indigo-700"><i class="fas fa-plus-circle"></i><span>เพิ่มนักเรียน</span></button></form></div><div class="bg-white p-6 rounded-xl shadow-sm"><h3 class="text-lg font-bold mb-4">นำเข้าจาก Excel</h3><input type="file" id="excel-file-input" class="hidden" accept=".xlsx, .xls, .csv"><label for="excel-file-input" class="file-input-label"><i class="fas fa-file-excel text-4xl text-gray-400 mb-2"></i><p class="font-semibold text-gray-700">เลือกไฟล์</p><p class="text-xs text-gray-500">(.xlsx, .xls, .csv)</p></label><p id="file-name-display" class="text-sm text-gray-600 mt-2 text-center"></p></div></div><div class="lg:col-span-2 bg-white p-6 rounded-xl shadow-sm"><div class="flex flex-col sm:flex-row justify-between sm:items-center gap-4 mb-4"><h3 class="text-lg font-bold">รายชื่อนักเรียนทั้งหมด</h3><div class="relative"><i class="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"></i><input type="text" id="student-management-search" placeholder="ค้นหา..." class="w-full pl-10 p-2 border rounded-lg"></div></div><div class="overflow-y-auto max-h-[600px]"><table class="w-full text-left"><thead class="bg-slate-100 text-gray-600 sticky top-0 text-sm"><tr><th class="p-3 rounded-l-lg">ชั้น/ห้อง</th><th class="p-3">ชื่อ-สกุล</th><th class="p-3">คะแนน</th><th class="p-3 text-center rounded-r-lg">จัดการ</th></tr></thead><tbody id="student-management-list"></tbody></table></div></div></div>`;
+        getEl('admin-rules-view').innerHTML = `<div class="grid grid-cols-1 lg:grid-cols-2 gap-6"><div class="bg-white p-6 rounded-xl shadow-sm"><h3 class="text-lg font-bold mb-4">จัดการเหตุผล (Reasons)</h3><div id="reasons-management-list" class="space-y-2 mb-4 border-b pb-4"></div><form id="add-reason-form" class="space-y-3 pt-4"><h4 class="font-semibold">เพิ่มเหตุผลใหม่</h4><div><label for="reason-id" class="text-sm font-medium">รหัส (ID)</label><input type="text" id="reason-id" placeholder="เช่น R07" required class="w-full p-2 border rounded-md mt-1"></div><div><label for="reason-name" class="text-sm font-medium">ชื่อเหตุผล</label><input type="text" id="reason-name" placeholder="เช่น ลืมของ" required class="w-full p-2 border rounded-md mt-1"></div><button type="submit" class="w-full bg-indigo-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-indigo-700 transition-colors"><i class="fas fa-plus"></i> เพิ่มเหตุผล</button></form></div><div class="bg-white p-6 rounded-xl shadow-sm"><h3 class="text-lg font-bold mb-4">จัดการมาตรการลงโทษ (Sanctions)</h3><div id="sanctions-management-list" class="space-y-2 mb-4 border-b pb-4"></div><form id="add-sanction-form" class="space-y-3 pt-4"><h4 class="font-semibold">เพิ่มมาตรการใหม่</h4><div><label for="sanction-id" class="text-sm font-medium">รหัส (ID)</label><input type="text" id="sanction-id" placeholder="เช่น S09" required class="w-full p-2 border rounded-md mt-1"></div><div><label for="sanction-name" class="text-sm font-medium">ชื่อมาตรการ</label><input type="text" id="sanction-name" placeholder="เช่น บำเพ็ญประโยชน์" required class="w-full p-2 border rounded-md mt-1"></div><div><label for="sanction-points" class="text-sm font-medium">คะแนน (Points)</label><input type="number" id="sanction-points" placeholder="เช่น -2, 5, 0" required class="w-full p-2 border rounded-md mt-1"></div><button type="submit" class="w-full bg-indigo-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-indigo-700 transition-colors"><i class="fas fa-plus"></i> เพิ่มมาตรการ</button></form></div></div>`;
+
+        attachEventListeners();
+        fetchInitialData().then(() => {
+            renderRecordOptions();
+            switchView('login-view');
+        });
+    }
+
+    document.addEventListener('DOMContentLoaded', init);
+</script>
+</body>
+</html>
+
